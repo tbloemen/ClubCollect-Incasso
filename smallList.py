@@ -15,7 +15,7 @@ def makeBlancDataFrame() -> pd.DataFrame:
     withEmpty = commissielist.assign(Totaal="", Bedrag_a=0, Bedrag_b=0, Bedrag_c=0)
     return withEmpty
 
-def exportBlancListToExcel(df: pd.DataFrame):
+def exportBlancListToExcel(df: pd.DataFrame = makeBlancDataFrame()):
     """Exports a blanc list to excel in the same directory."""
     # Setup filename
     x = dt.datetime.now()
