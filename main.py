@@ -32,7 +32,7 @@ def main():
 
         answer = str(
             input("Do you want to fill in the committee lists into a final sheet? (y/n) "))
-        if answer == "y" or True:
+        if answer == "y":
             reader.exportToExcel(UNPROCESSED_DIR, PROCESSED_DIR)
             moveProcessedSmallListsToProcessed()
     except Exception as e:
