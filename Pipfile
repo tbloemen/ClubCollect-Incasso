@@ -5,10 +5,9 @@ name = "pypi"
 
 [packages]
 pandas = "*"
-chardet = "*"
-openpyxl = "*"
 xlsxwriter = "*"
 pyinstaller = "*"
+openpyxl = "*"
 
 [dev-packages]
 

@@ -1,0 +1,9 @@
+{
+  "total": "Totals to check:",
+  "filename": {
+    "small_incassolist": "Empty Incasso List"
+  },
+  "instructions": "Please fill in your costs per member under the appropriate column. Replace the column name (Bedrag_a, Bedrag_b, or Bedrag_c) with a description of your costs (e.g. Muppet Music or OWee T-shirt). The totals will automatically update.",
+  "clubcollect_memberInfo": "Export_",
+  "access_memberInfo": "Huidige leden"
+}
