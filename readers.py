@@ -1,21 +1,37 @@
-import datetime as dt
 import queue
 from enum import Enum
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
-from schemas import ClubCollectSchema, SmallSchema
-from smallList import SmallList
+from constants import (MEMBERDATA_DIR, PROCESSED_DIR, STARTING_ROW,
+                       UNPROCESSED_DIR)
+from schemas import ClubCollectSchema, CommitteeExcel, SmallSchema
 
 
 class Format(Enum):
     CLUBCOLLECT = "ClubCollect"
     EXCEL = "Excel"
+    COMMITTEE_EXCEL = "Committee Excel"
 
 
-class MemberReader:
+class Reader:
+    def read_data(self) -> pd.DataFrame:
+        raise NotImplementedError(
+            "This method should only be called by inherited classes")
+
+    def factory_method(self, format: Format) -> "Reader":
+        if format == Format.CLUBCOLLECT or format == Format.EXCEL:
+            return MemberReader(MEMBERDATA_DIR).factory_method()
+        elif format == Format.COMMITTEE_EXCEL:
+            return CommitteeExcelReader()
+        else:
+            raise ValueError()
+
+
+class MemberReader(Reader):
+    format: Format
+
     def __init__(self, memberdata_dir: str) -> None:
         myqueue: queue.PriorityQueue[tuple[float,
                                            Path]] = queue.PriorityQueue()
@@ -31,23 +47,15 @@ class MemberReader:
             self.raw = pd.read_csv(result, sep=";")
             self.format = Format.CLUBCOLLECT
         else:
-            self.raw = pd.read_excel(result, "Huidige_leden")
+            self.raw = pd.read_excel(result)
             self.format = Format.EXCEL
         self.dir = memberdata_dir
 
-    def convertToBigDataFrame(self) -> pd.DataFrame:
-        raise NotImplementedError(
-            "This method should only be called by inherited classes")
-
-    def convertToSmallDataFrame(self) -> pd.DataFrame:
-        big_df = self.convertToBigDataFrame()
+    def get_small_schema_df(self) -> pd.DataFrame:
+        big_df = self.read_data()
         small_df = big_df[[SmallSchema.id, SmallSchema.fname,
                            SmallSchema.infix, SmallSchema.lname]]
         return small_df
-
-    def exportToExcel(self) -> None:
-        raise NotImplementedError(
-            "This method should only be called by inherited classes")
 
     def factory_method(self):
         if self.format == Format.CLUBCOLLECT:
@@ -68,18 +76,7 @@ class ClubCollectReader(MemberReader):
         "telefoonnummer 1": ClubCollectSchema.phone,
         "iban": ClubCollectSchema.iban}
 
-    swaps_out = {
-        ClubCollectSchema.id: "club_membership_number",
-        ClubCollectSchema.fname: "firstname",
-        ClubCollectSchema.infix: "infix",
-        ClubCollectSchema.lname: "lastname",
-        ClubCollectSchema.email: "email",
-        ClubCollectSchema.email: "phone",
-        ClubCollectSchema.iban: "bank_iban",
-        ClubCollectSchema.countrycode: "countrycode"
-    }
-
-    def convertToBigDataFrame(self) -> pd.DataFrame:
+    def read_data(self) -> pd.DataFrame:
         headers = list(self.swaps_in.keys())
         stripped_member_info: pd.DataFrame = self.raw[headers]
         df = stripped_member_info.rename(columns=self.swaps_in)
@@ -88,35 +85,38 @@ class ClubCollectReader(MemberReader):
 
         return df
 
-    def amount_description_helper(self, smallList: pd.DataFrame):
-        # transform col with name and amounts to amount-n and description-n columns
-        smallList = smallList.replace(0, np.nan)
-        for i, col in enumerate(smallList):
-            if col == ClubCollectSchema.id:
+
+class CommitteeExcelReader(Reader):
+    def read_data(self) -> pd.DataFrame:
+        smallLists = self.extractSmallLists(UNPROCESSED_DIR)
+        if smallLists is None:
+            raise FileNotFoundError(
+                "All committee excels have been processed already.")
+        print(smallLists)
+        processedSmallLists = self.extractSmallLists(PROCESSED_DIR)
+        if not processedSmallLists.empty:
+            smallLists = pd.merge(
+                smallLists, processedSmallLists, left_index=True, right_index=True, how="outer")
+        print(processedSmallLists)
+        return smallLists
+
+    def readSmallExcel(self, filename: Path) -> pd.DataFrame:
+        df = pd.read_excel(filename, skiprows=STARTING_ROW-1)
+        df = df[df[CommitteeExcel.total] != 0]
+        df = df.drop(columns=[CommitteeExcel.fname, CommitteeExcel.infix,
+                     CommitteeExcel.lname, CommitteeExcel.total])
+        df = df[df.columns[df.sum() != 0]]
+        df = df.set_index(CommitteeExcel.id)
+        return df
+
+    def extractSmallLists(self, dir: str) -> pd.DataFrame:
+        df = pd.DataFrame()
+        for x in Path.cwd().joinpath(dir).glob("*.xlsx"):
+            new_df = self.readSmallExcel(x)
+            if df.empty:
+                df = new_df
                 continue
-            amount = f"amount-{i + 1}"
-            description = f"description-{i + 1}"
-            smallList = smallList.rename(columns={col: amount})
-            arr = np.where(np.isnan(smallList[amount]),
-                           [""]*len(smallList), [col]*len(smallList))
-            smallList.insert(smallList.columns.get_loc(
-                amount)+1, description, arr)
-        return smallList
-
-    def exportToExcel(self, unprocessed_dir: str, processed_dir: str) -> None:
-        smallList = SmallList(self.convertToSmallDataFrame())
-        smallLists = smallList.combineSmallLists(
-            unprocessed_dir, processed_dir)
-        df = pd.merge(self.convertToBigDataFrame(), self.amount_description_helper(
-            smallLists), on=ClubCollectSchema.id)
-        df.insert(0, ClubCollectSchema.id, df.pop(ClubCollectSchema.id))
-        df = df.rename(columns=self.swaps_out)
-
-        x = dt.datetime.now()
-        writer = pd.ExcelWriter(
-            f"Incasso [Processed at {x.strftime('%a %d %b, %H-%M-%S')}].xlsx", engine="xlsxwriter")
-        df.to_excel(writer, index=False)
-
-        writer.sheets["Sheet1"].autofit()
-        writer.close()
-        return
+            merged = pd.merge(df, new_df, how="outer",
+                              left_index=True, right_index=True)
+            df = merged
+        return df

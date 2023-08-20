@@ -1,40 +1,39 @@
 import os
 from pathlib import Path
 
-from readers import MemberReader
-from smallList import SmallList
-
-UNPROCESSED_DIR = "Unprocessed committee lists"
-PROCESSED_DIR = "Processed committee lists"
-MEMBERDATA_DIR = "Member data"
+from constants import MEMBERDATA_DIR, PROCESSED_DIR, UNPROCESSED_DIR
+from exporters import Exporter
+from readers import Format, MemberReader
 
 
-def setupDirectory() -> None:
+def setup_directory() -> None:
     Path.cwd().joinpath(UNPROCESSED_DIR).mkdir(parents=True, exist_ok=True)
     Path.cwd().joinpath(PROCESSED_DIR).mkdir(parents=True, exist_ok=True)
     Path.cwd().joinpath(MEMBERDATA_DIR).mkdir(parents=True, exist_ok=True)
 
 
-def moveProcessedSmallListsToProcessed() -> None:
+def process() -> None:
     for x in Path.cwd().joinpath(UNPROCESSED_DIR).glob("*.xlsx"):
         x.rename(Path.cwd().joinpath(PROCESSED_DIR).joinpath(x.name))
 
 
 def main():
     try:
-        setupDirectory()
-        reader = MemberReader(MEMBERDATA_DIR).factory_method()
-        smallList = SmallList(reader.convertToSmallDataFrame())
+        setup_directory()
+        member_reader = MemberReader(MEMBERDATA_DIR)
+        member_format = member_reader.format
+        committee_excel_exporter = Exporter().factory_method(Format.COMMITTEE_EXCEL)
         answer = str(
             input("Do you want to create a new empty committee list? (y/n) "))
         if answer == "y":
-            smallList.exportToExcel()
+            committee_excel_exporter.export_to_excel(
+                member_reader.get_small_schema_df())
 
         answer = str(
             input("Do you want to fill in the committee lists into a final sheet? (y/n) "))
         if answer == "y":
-            reader.exportToExcel(UNPROCESSED_DIR, PROCESSED_DIR)
-            moveProcessedSmallListsToProcessed()
+            Exporter().factory_method(member_format).export_to_excel(member_reader.read_data())
+            process()
     except Exception as e:
         print(e)
         os.system('pause')
