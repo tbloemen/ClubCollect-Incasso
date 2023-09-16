@@ -12,7 +12,7 @@ def setup_directory() -> None:
     Path.cwd().joinpath(MEMBERDATA_DIR).mkdir(parents=True, exist_ok=True)
 
 
-def process() -> None:
+def move_files() -> None:
     for x in Path.cwd().joinpath(UNPROCESSED_DIR).glob("*.xlsx"):
         x.rename(Path.cwd().joinpath(PROCESSED_DIR).joinpath(x.name))
 
@@ -20,8 +20,7 @@ def process() -> None:
 def main():
     try:
         setup_directory()
-        member_reader = MemberReader(MEMBERDATA_DIR)
-        member_format = member_reader.format
+        member_reader = MemberReader(MEMBERDATA_DIR).factory_method()
         committee_excel_exporter = Exporter().factory_method(Format.COMMITTEE_EXCEL)
         answer = str(
             input("Do you want to create a new empty committee list? (y/n) "))
@@ -32,8 +31,9 @@ def main():
         answer = str(
             input("Do you want to fill in the committee lists into a final sheet? (y/n) "))
         if answer == "y":
-            Exporter().factory_method(member_format).export_to_excel(member_reader.read_data())
-            process()
+            Exporter().factory_method(member_reader.format).export_to_excel(
+                member_reader.read_data())
+            move_files()
     except Exception as e:
         print(e)
         os.system('pause')

@@ -87,21 +87,28 @@ class ClubCollectReader(MemberReader):
 
 
 class CommitteeExcelReader(Reader):
+    swaps_in = {
+        "ID": CommitteeExcel.id,
+        "First name": CommitteeExcel.fname,
+        "Infix": CommitteeExcel.infix,
+        "Last name": CommitteeExcel.lname,
+        "Total": CommitteeExcel.total,
+    }
+
     def read_data(self) -> pd.DataFrame:
         smallLists = self.extractSmallLists(UNPROCESSED_DIR)
-        if smallLists is None:
+        if smallLists.empty:
             raise FileNotFoundError(
                 "All committee excels have been processed already.")
-        print(smallLists)
         processedSmallLists = self.extractSmallLists(PROCESSED_DIR)
         if not processedSmallLists.empty:
             smallLists = pd.merge(
                 smallLists, processedSmallLists, left_index=True, right_index=True, how="outer")
-        print(processedSmallLists)
         return smallLists
 
     def readSmallExcel(self, filename: Path) -> pd.DataFrame:
         df = pd.read_excel(filename, skiprows=STARTING_ROW-1)
+        df = df.rename(columns=self.swaps_in)
         df = df[df[CommitteeExcel.total] != 0]
         df = df.drop(columns=[CommitteeExcel.fname, CommitteeExcel.infix,
                      CommitteeExcel.lname, CommitteeExcel.total])
@@ -112,6 +119,7 @@ class CommitteeExcelReader(Reader):
     def extractSmallLists(self, dir: str) -> pd.DataFrame:
         df = pd.DataFrame()
         for x in Path.cwd().joinpath(dir).glob("*.xlsx"):
+            print(f"Merging {x}...")
             new_df = self.readSmallExcel(x)
             if df.empty:
                 df = new_df
