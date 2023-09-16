@@ -43,16 +43,26 @@ class ClubCollectExporter(Exporter):
         smallLists = Reader().factory_method(
             Format.COMMITTEE_EXCEL).read_data()
         df = pd.merge(clubcollect_schema_df, self.amount_description_helper(
-            smallLists), on=ClubCollectSchema.id, how="inner")
+            smallLists), on=ClubCollectSchema.id, how="right", indicator=True)
         df.insert(0, ClubCollectSchema.id, df.pop(ClubCollectSchema.id))
+        mismatches = df[df["_merge"] == "right_only"]
+        mismatches = mismatches.drop(columns=["_merge"])
+        mismatches.replace("", float("NaN"), inplace=True)
+        mismatches.dropna(how="all", axis=1, inplace=True)
+
+        df = df[df["_merge"] == "both"]
+        df = df.drop(columns="_merge")
         df = df.rename(columns=self.swaps_out)
 
         x = dt.datetime.now()
         writer = pd.ExcelWriter(
             f"Incasso [Processed at {x.strftime('%a %d %b, %H-%M-%S')}].xlsx", engine="xlsxwriter")
-        df.to_excel(writer, index=False)
+        sheetname = "Incasso"
+        df.to_excel(writer, index=False, sheet_name=sheetname)
+        mismatches.to_excel(writer, sheet_name="Mismatches", index=False)
 
-        writer.sheets["Sheet1"].autofit()
+        for sheet in writer.sheets.values():
+            sheet.autofit()
         writer.close()
         return
 
